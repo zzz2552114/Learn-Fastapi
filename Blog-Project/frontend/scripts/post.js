@@ -8,6 +8,7 @@ submitButton.addEventListener('click', function() {
 
     fetch(`${url}/api/v1/posts`, {
         method: 'POST',
+        credentials: 'include',
         headers: {
             'Content-Type': 'application/json'
         },

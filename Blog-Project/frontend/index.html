@@ -11,19 +11,43 @@
     <p id="message">尚未检查</p>
     <script src="scripts/check-backend.js"></script>
     <div id="button-list"></div>
+
     <div>
-        <div id="related"></div>
-        <div id="content"></div>
+        <span id="current-reading-mode"></span>
+        <button id="reading-mode">切换阅读模式</button>
     </div>
     <button id="latest">最新文章</button>
-    <script src="scripts/get-file.js"></script>
     <form id="post-form">
-        <input id="post-title" placeholder="标题" required>
-        <input id="post-author" placeholder="作者" required>
-        <textarea id="post-content" placeholder="正文" required></textarea>
+        <input id="post-title" placeholder="标题">
+        <input id="post-author" placeholder="作者">
+        <textarea id="post-content" placeholder="正文"></textarea>
         <button id="submit-button">创建文章</button>
         <button id="preview-button" type="button">预览文章</button>
+        <br>
+        <input id="search-keyword" placeholder="搜索关键字">
+        <input type="number" id="search-skip" placeholder="跳过数量" min="0">
+        <input type="number" id="search-limit" placeholder="限制数量" min="1" max="100">
+        <button id="search" type="button">搜索文章</button>
+        <div id="search-lists"></div>
     </form>
+    <form>
+        <input id="update-title" placeholder="更新标题">
+        <input id="update-author" placeholder="更新作者">
+        <input id="update-content" placeholder="更新内容">
+        <button id="patch">提交更新</button>
+        <input id="delete-post">
+        <button id="'delete">删除</button>
+        <input id="import" type="file" multiple>
+        <button>上传文件</button>
+    </form>
+    <div>
+        <div id="related"></div>
+        <div id="post-info"></div>
+        <div id="content"></div>
+    </div>
+    <script src="scripts/search-post.js"></script>
     <script src="scripts/post.js"></script>
+    <script src="scripts/get-file.js"></script>
+    <script src="scripts/reading-mode.js"></script>
 </body>
 </html>

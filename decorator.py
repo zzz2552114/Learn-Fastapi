@@ -16,13 +16,13 @@ def hello():
 '''
 # 手工装饰
 hello = simple_wrapper(hello)
-# hello()
+hello()
 
 # 这里就可以上装饰器了
 @simple_wrapper
 def hey():
     return "Hey!"
-# hey()
+hey()
 # 实际上就是把hey变成装饰器里面那个函数，然后hey本身会被传到装饰器里作为参数
 
 # 但是注意下面的例子又有一些不同
@@ -59,6 +59,8 @@ def outter_wrapper(times):
 @outter_wrapper(times=3)
 def f2(a,b):
     return f'a+b = {a+b}'
+
+
 print(f2(10,20))
 
 # 这里就必须用三层def来定义装饰器，其中第一层是用来
@@ -105,5 +107,9 @@ def hi():
 
 hi()
 hi()
+@CountCalls
+def abc(n):
+    print("Hi"*n);
+abc(3)
 # 这里是类包装，相当于hi = CountCalls(hi)覆盖
 # 学到这应该就够了

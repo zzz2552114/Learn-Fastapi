@@ -1,13 +1,11 @@
-from unittest.mock import Base
-
-from anyio import Path
-from fastapi import Depends, FastAPI, Query
+from fastapi import Depends, FastAPI, Query,Cookie, Header, Request, Response,Body,Path,HTTPException,UploadFile,File,Form
 from typing import Annotated,Any
 from pydantic import Field,BaseModel
 from pathlib import Path as pPath
 import aiofiles
 import json
 from fastapi.middleware.cors import CORSMiddleware
+from enum import Enum
 
 app = FastAPI()
 
@@ -98,10 +96,7 @@ async def get_latest_post():
     id = str(latest_post.id)
     return id
 
-@app.get("/api/v1/posts/{post_id}")
-async def get_post_detail(post_id: str):
-    result = await find_post_by_id(post_id)
-    return result
+
 
 class PostCreate(BaseModel):
     title : str
@@ -113,7 +108,7 @@ def generate_post_id():
         return 1
     return max(item.id for item in items) + 1
 
-@app.post('/api/v1/posts')
+@app.post('/api/v1/posts',status_code=201)
 async def create_post(post : PostCreate):
     title = post.title.strip()
     author = post.author.strip()
@@ -164,29 +159,174 @@ async def preview_post(post: PostCreate):
     }
     return post_preview
 
-class PostQuery(Base):
-    keyword : str | None = None
-    skip : int = Field(default=0, ge=0)
-    limit : int = Field(default=5, ge=1, le=100)
-
+class PostQuery(BaseModel):
+    keyword : str
+    limit : int = Field(...,ge=1,le=100)
+    skip : int = Field(0,ge=0)
 @app.get('/api/v1/posts/search')
 async def search_posts(
-    post: PostQuery = Depends()):
-        keyword = post.keyword
-        skip = post.skip
-        limit = post.limit
-        if keyword:
-            keyword = keyword.casefold().strip()
-        result = []
-        for item in items:
-            if keyword and keyword.lower() not in item.title.lower():
-                continue
-            result.append(item)
-        total = len(result)
-        paginated = result[skip:skip + limit]
-        return {
-            "items": paginated,
-            "total": total,
-            "skip": skip,
-            "limit": limit
+    query: Annotated[PostQuery, Query(...)]):
+    keyword = query.keyword
+    limit = query.limit
+    skip = query.skip
+    if keyword:
+        keyword = keyword.casefold().strip()
+    else :
+        return {"error": "keyword cannot be empty"}
+    result = []
+    for item in items:
+        if keyword not in item.title.casefold():
+            continue
+        result.append(item)
+    total = len(result)
+    paginated = result[skip:skip + limit]
+    return {
+        "items": paginated,
+        "total": total,
+        "skip": skip,
+        "limit": limit
+    }
+
+@app.get("/api/v1/posts/{post_id}")
+async def get_post_detail(post_id: str,reading_mode:Annotated[str|None, Cookie()] = None):
+    result = await find_post_by_id(post_id)
+    if not reading_mode or reading_mode=="compact":
+        result['content'] = result['content'][:100] + "..."
+    return result
+
+class ReadingMode(str,Enum):
+    compact = "compact"
+    full = "full"
+@app.post("/api/v1/settings/reading-mode")
+async def set_reading_mode(mode: Annotated[ReadingMode, Body(...)],response: Response):
+    response.set_cookie(
+        key="reading_mode", 
+        value=mode.value, 
+        httponly=True,
+        path="/",
+        max_age=3600*24*30  # 设置为30天
+    )
+    return {"message": f"Reading mode set to {mode.value}"}
+
+class PostUpdate(BaseModel):
+    title : str | None = Field(None)
+    author : str | None = Field(None)
+    content: str | None = Field(None)
+@app.patch('/api/v1/posts/{post_id}')
+async def update_post(post_id : Annotated[int,Path()],post_update:PostUpdate):
+    update = post_update.model_dump(exclude_unset=True)
+    title = update['title']
+    author = update['author']
+    content = update['content']
+    if not title and not author and not content:
+        raise HTTPException(status_code=400,detail='At Least One Field')
+    
+    for item in items:
+        if item.id == post_id:
+            if title:
+                item.title = title.strip()
+            if author:
+                item.author = author.strip()
+            if content:
+                file_path = pPath(post_path)/f'{item.link}'
+                try:
+                    async with aiofiles.open(file_path, "w", encoding='utf-8') as f:
+                        await f.write(content.strip())
+                except Exception as e:
+                    return {"error": f"更新文件失败: {str(e)}"}
+            
+            # 更新posts-info.txt
+            try:
+                async with aiofiles.open(post_info_path, "w", encoding='utf-8') as f:
+                    for i in items:
+                        await f.write(json.dumps(i.model_dump()) + "\n")
+            except Exception as e:
+                return {"error": f"更新信息文件失败: {str(e)}"}
+            
+            return {"message": "文章更新成功", "post": item.model_dump()}
+    raise HTTPException(status_code=404,detail='Post not found')
+
+@app.delete('/api/v1/posts/{post_id}')
+async def delete_post(post_id:int):
+    for item in items:
+        if item.id == post_id:
+            file_path = pPath(post_path)/f'{item.link}'
+            try:
+                if file_path.exists():
+                    file_path.unlink()
+            except Exception as e:
+                return {"error": f"删除文件失败: {str(e)}"}
+            
+            items.remove(item)
+            
+            try:
+                async with aiofiles.open(post_info_path, "w", encoding='utf-8') as f:
+                    for i in items:
+                        await f.write(json.dumps(i.model_dump()) + "\n")
+            except Exception as e:
+                return {"error": f"更新信息文件失败: {str(e)}"}
+            
+            return {"message": "文章删除成功","id":post_id}
+    
+    raise HTTPException(status_code=404, detail='Post not found')
+
+@app.post('/api/v1/posts/import')
+async def import_markdown_post(
+    file: UploadFile,
+    title: str = Body(...),
+    author: str = Body("zhm")
+):
+    if file.filename and not file.filename.endswith('.md'):
+        
+    # 读取上传的文件内容
+        content = await file.read()
+        content = content.decode('utf-8')
+        
+        # 创建新文章
+        new_id = generate_post_id()
+        new_post = {
+            "id": new_id,
+            "title": title.strip(),
+            "author": author.strip(),
+            "link": f"{new_id}.md"
         }
+    
+    # 保存文件
+        post_file_path = pPath(post_path)/f"{new_id}.md"
+        try:
+            async with aiofiles.open(post_file_path, "w", encoding='utf-8') as f:
+                await f.write(content)
+            async with aiofiles.open(post_info_path, "a", encoding='utf-8') as f:
+                await f.write(json.dumps(new_post) + "\n")
+            items.append(postlink.model_validate(new_post))
+        except Exception as e:
+            return {"error": f"failed to import post: {str(e)}"}
+        return {"message": "post imported successfully", "post": new_post}
+    raise HTTPException(status_code=400,detail='filename need to be submitted')
+
+@app.put('/api/v1/posts/{post_id}')
+async def replace_post(post_id: int, post: PostCreate):
+    for item in items:
+        if item.id == post_id:
+            title = post.title.strip()
+            author = post.author.strip()
+            content = post.content.strip()
+            if not title or not content:
+                raise HTTPException(status_code=400, detail="title and content cannot be empty")
+            
+            item.title = title
+            item.author = author
+            
+            file_path = pPath(post_path)/f'{item.link}'
+            try:
+                async with aiofiles.open(file_path, "w", encoding='utf-8') as f:
+                    await f.write(content)
+                async with aiofiles.open(post_info_path, "w", encoding='utf-8') as f:
+                    for i in items:
+                        await f.write(json.dumps(i.model_dump()) + "\n")
+            except Exception as e:
+                return {"error": f"failed to replace post: {str(e)}"}
+            
+            return {"message": "post replaced successfully", "post": item.model_dump()}
+    
+    raise HTTPException(status_code=404, detail='Post not found')

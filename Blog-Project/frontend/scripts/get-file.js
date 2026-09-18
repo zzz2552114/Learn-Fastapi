@@ -1,11 +1,15 @@
 let url = 'http://127.0.0.1:8000';
 let buttonList = document.getElementById('button-list');
 let relatedDiv = document.getElementById('related');
+let postinfo = document.getElementById('post-info');
 let showDiv = document.getElementById('content');
 let latest = document.getElementById('latest');
+let showingpost = '';
 
 function postList() {
-    fetch(`${url}/api/v1/posts`)
+    fetch(`${url}/api/v1/posts`,{
+        credentials: 'include'
+    })
         .then(function(response) {
             if(!response.ok) {
                 throw new Error('Network response was not ok');
@@ -24,7 +28,7 @@ function postList() {
                 });
                 buttonList.appendChild(button);
             }
-            showDiv.innerHTML = '<p>请选择一篇文章查看内容</p>';
+            postinfo.innerHTML = '<p>请选择一篇文章查看内容</p>';
         })
         .catch(function(error) {
             buttonList.innerHTML = '<p>加载文章列表失败：' + error.message + '</p>';
@@ -32,8 +36,11 @@ function postList() {
         });
 }
 function fetchPost(postid) {
-    showDiv.innerHTML = '<p>加载中...</p>';
-    fetch(`${url}/api/v1/posts/${postid}`)
+    showingpost = postid;
+    postinfo.innerHTML = '<p>加载中...</p>';
+    fetch(`${url}/api/v1/posts/${postid}`,{
+        credentials: 'include'
+    })
         .then(function(response) {
             if(!response.ok) {
                 throw new Error('Network response was not ok');
@@ -41,7 +48,9 @@ function fetchPost(postid) {
             return response.json();
         })
         .then(function(data) {
-            fetch(`${url}/api/v1/posts/${postid}/related`)
+            fetch(`${url}/api/v1/posts/${postid}/related`,{
+                credentials: 'include'
+            })
                 .then(function(response) {
                     if(!response.ok) {
                         throw new Error('Network response was not ok');
@@ -68,10 +77,11 @@ function fetchPost(postid) {
                     relatedDiv.innerHTML = '<p>加载相关文章失败：' + error.message + '</p>';
                     console.error('Error fetching related posts:', error);
                 });
-            showDiv.innerHTML = `<p>标题：${data.title}<br>作者：${data.author}<\p>`+ marked.parse(data.content);
+            postinfo.innerHTML = `<p>标题：${data.title}<br>作者：${data.author}<\p>`;
+            showDiv.innerHTML = marked.parse(data.content);
         })
         .catch(function(error) {
-            showDiv.innerHTML = '<p>加载文章失败：' + error.message + '</p>';
+            postinfo.innerHTML = '<p>加载文章失败：' + error.message + '</p>';
             console.error('Error fetching post:', error);
         });
 }
@@ -79,7 +89,9 @@ postList();
 
 function fetchLatestPosts() {
     showDiv.innerHTML = '<p>加载中...</p>';
-    fetch(`${url}/api/v1/posts/latest`)
+    fetch(`${url}/api/v1/posts/latest`,{
+        credentials: 'include'
+    })
         .then(function(response) {
             if(!response.ok) {
                 showDiv.innerHTML = '<p>加载最新文章失败：' + error.message + '</p>';
